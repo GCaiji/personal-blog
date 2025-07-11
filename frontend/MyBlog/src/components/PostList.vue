@@ -1,7 +1,10 @@
 <template>
   <div class="post-list-container">
     <h1>文章列表</h1>
-    <div v-if="posts.length === 0" class="no-posts">
+    <div v-if="loading" class="loading-indicator">
+      <p>正在加载文章...</p>
+    </div>
+    <div v-else-if="posts.length === 0" class="no-posts">
       <p>暂无文章。</p>
     </div>
     <div v-else class="posts-grid">
@@ -23,6 +26,7 @@ import axios from 'axios';
 import { useRouter } from 'vue-router';
 
 const posts = ref([]);
+const loading = ref(true); // 新增 loading 状态
 const router = useRouter();
 
 const goToPostDetail = (postId) => {
@@ -36,6 +40,8 @@ onMounted(async () => {
     console.log('获取到的文章数据:', posts.value);
   } catch (error) {
     console.error('获取文章列表失败:', error);
+  } finally {
+    loading.value = false; // 数据加载完成后设置 loading 为 false
   }
 });
 </script>
@@ -109,5 +115,12 @@ h1 {
 .post-meta i {
   margin-right: 5px;
   color: #007bff;
+}
+
+.loading-indicator {
+  text-align: center;
+  color: #007bff;
+  font-size: 1.2em;
+  margin-top: 50px;
 }
 </style>

@@ -2,3 +2,4 @@ Flask
 PyMySQL
 Flask-Cors
 flasgger
+PyJWT

@@ -157,7 +157,7 @@ def like_post(current_user, post_id):
             
             # 2. 检查当前点赞状态 
             sql_check_like = """ 
-                SELECT id FROM user_post_like 
+                SELECT id FROM post_like 
                 WHERE post_id = %s AND user_id = %s 
             """ 
             cursor.execute(sql_check_like, (post_id, user_id)) 
@@ -167,7 +167,7 @@ def like_post(current_user, post_id):
                 # 3. 已点赞 -> 执行取消点赞 
                 # 3.1 删除点赞记录 
                 sql_delete_like = """ 
-                    DELETE FROM user_post_like 
+                    DELETE FROM post_like 
                     WHERE id = %s 
                 """ 
                 cursor.execute(sql_delete_like, (existing_like['id'],)) 
@@ -195,7 +195,7 @@ def like_post(current_user, post_id):
                 # 4. 未点赞 -> 执行点赞 
                 # 4.1 添加点赞记录 
                 sql_insert_like = """ 
-                    INSERT INTO user_post_like (post_id, user_id) 
+                    INSERT INTO post_like (post_id, user_id) 
                     VALUES (%s, %s) 
                 """ 
                 cursor.execute(sql_insert_like, (post_id, user_id)) 
