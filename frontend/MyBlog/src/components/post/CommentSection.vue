@@ -45,8 +45,7 @@ const newCommentContent = ref('');
 const fetchComments = async () => {
   try {
     const response = await axios.get(`/api/comments/${props.postId}`);
-    comments.value = response.data;
-    console.log('Fetched comments:', comments.value);
+    comments.value = response.data.comments;
   } catch (error) {
     console.error('获取评论失败:', error);
     comments.value = [];

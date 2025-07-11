@@ -5,7 +5,7 @@ from utils.db import get_db_connection
 import pymysql
 from utils.auth_utils import jwt_required
 
-comment_bp = Blueprint('comment_bp', __name__)
+post_comment_bp = Blueprint('post_comment_bp', __name__)
 
 def build_comment_tree(comments, parent_id=None):
     branch = []
@@ -35,7 +35,7 @@ def get_username_by_id(user_id):
     finally:
         conn.close()
 
-@comment_bp.route('/comments/<int:post_id>', methods=['GET'])
+@post_comment_bp.route('/comments/<int:post_id>', methods=['GET'])
 @jwt_required
 @swag_from({
     'tags': ['Comment'],
@@ -94,20 +94,43 @@ def get_comments_by_post_id(post_id, current_user):
         return jsonify({'error': 'Database connection failed'}), 500
     
     try:
-        with conn.cursor() as cursor:
-            sql = "SELECT id, user_id, post_id, parent_id, content FROM post_comment WHERE post_id = %s ORDER BY id ASC"
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+            # 修改SQL查询：一次性获取用户名
+            sql = """
+                SELECT pc.id, pc.user_id, pc.post_id, pc.parent_id, pc.content, 
+                    COALESCE(u.username, '匿名用户') AS username
+                FROM post_comment pc
+                LEFT JOIN user u ON pc.user_id = u.id
+                WHERE pc.post_id = %s 
+                ORDER BY pc.id ASC
+            """
             cursor.execute(sql, (post_id,))
             comments_raw = cursor.fetchall()
 
-            # If no comments are found, return an empty list with 200 OK
             if not comments_raw:
                 return jsonify({'comments': []})
 
+            # 优化评论树构建 - 使用字典提高性能
+            comments_by_id = {}
+            root_comments = []
+            
+            # 先创建所有评论项
             for comment in comments_raw:
-                comment['username'] = get_username_by_id(comment['user_id'])
-
-            comment_tree = build_comment_tree(comments_raw)
-            return jsonify({'comments': comment_tree})
+                comment_id = comment['id']
+                comments_by_id[comment_id] = comment
+                comments_by_id[comment_id]['replies'] = []
+                
+            # 构建评论层级关系
+            for comment in comments_raw:
+                parent_id = comment['parent_id']
+                comment_id = comment['id']
+                
+                if parent_id is None:
+                    root_comments.append(comments_by_id[comment_id])
+                elif parent_id in comments_by_id:
+                    comments_by_id[parent_id]['replies'].append(comments_by_id[comment_id])
+            
+            return jsonify({'comments': root_comments})
                 
     except pymysql.Error as e:
         print(f"Database error in get_comments_by_post_id: {e}")
@@ -115,7 +138,8 @@ def get_comments_by_post_id(post_id, current_user):
     finally:
         conn.close()
 
-@comment_bp.route('/comments', methods=['POST'])
+
+@post_comment_bp.route('/comments', methods=['POST'])
 @jwt_required
 @swag_from({
     'tags': ['Comment'],

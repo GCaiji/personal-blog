@@ -9,7 +9,7 @@ from config import Config
 from blueprints.post_routes import post_bp
 from blueprints.auth_routes import auth_bp
 from blueprints.project_routes import project_bp
-from blueprints.comment_routes import comment_bp
+from blueprints.post_comment_routes import post_comment_bp
 from blueprints.user_routes import user_bp
 
 
@@ -36,7 +36,7 @@ CORS(app)  # 允许跨域请求
 app.register_blueprint(post_bp, url_prefix='/api')
 app.register_blueprint(auth_bp, url_prefix='/api')
 app.register_blueprint(project_bp, url_prefix='/api')
-app.register_blueprint(comment_bp, url_prefix='/api')
+app.register_blueprint(post_comment_bp, url_prefix='/api')
 app.register_blueprint(user_bp, url_prefix='/api')
 
 

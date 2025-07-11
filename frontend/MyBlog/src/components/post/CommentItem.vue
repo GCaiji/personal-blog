@@ -71,18 +71,20 @@ const submitReply = async (parentId, parentUsername) => {
     ElMessage.warning('回复内容不能为空！');
     return;
   }
+
   try {
     const response = await axios.post('/api/comments', {
-      user_id: 1, // 示例：实际应从登录用户会话中获取
+      user_id: 1,
       post_id: props.postId,
-      content: `回复 ${parentUsername}：${replyContent.value}`,
+      content: replyContent.value,  // 移除回复前缀
       parent_id: parentId
     });
+
     if (response.status === 201) {
       ElMessage.success('回复提交成功！');
       replyContent.value = '';
       showReplyForm.value = false;
-      emit('comment-added'); // Notify parent to refresh comments
+      emit('comment-added');
     } else {
       ElMessage.error('回复提交失败！');
     }
