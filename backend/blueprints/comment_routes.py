@@ -28,7 +28,7 @@ def get_username_by_id(user_id):
             result = cursor.fetchone()
             if result:
                 return result['username']
-            return None
+            return ""
     except pymysql.Error as e:
         print(f"Database error in get_username_by_id: {e}")
         return None
@@ -45,25 +45,42 @@ def get_username_by_id(user_id):
             'name': 'post_id',
             'in': 'path',
             'type': 'integer',
-        'required': True,
-        'description': '文章ID'
+            'required': True,
+            'description': '文章ID'
         }
     ],
+    'definitions': {
+        'Comment': {
+            'type': 'object',
+            'properties': {
+                'id': {'type': 'integer', 'description': '评论ID'},
+                'username': {'type': 'string', 'description': '评论用户名'},
+                'post_id': {'type': 'integer', 'description': '文章ID'},
+                'parent_id': {'type': ['integer', 'null'], 'description': '父评论ID (如果为空则为一级评论)'},
+                'content': {'type': 'string', 'description': '评论内容'},
+                'replies': {
+                    'type': 'array',
+                    'description': '回复列表',
+                    'items': {
+                        '$ref': '#/definitions/Comment'
+                    }
+                }
+            }
+        }
+    },
     'responses': {
         200: {
             'description': '成功获取评论列表',
             'schema': {
-                'type': 'array',
-                'items': {
-                    'type': 'object',
-                    'properties': {
-                        'id': {'type': 'integer', 'description': '评论ID'},
-    
-                        'username': {'type': 'string', 'description': '评论用户名'},
-                        'post_id': {'type': 'integer', 'description': '文章ID'},
-                        'parent_id': {'type': ['integer', 'null'], 'description': '父评论ID (如果为空则为一级评论)'},
-                        'content': {'type': 'string', 'description': '评论内容'}
+                'type': 'object',
+                'properties': {
+                    'comments': {
+                        'type': 'array',
+                        'items': {
+                            '$ref': '#/definitions/Comment'
+                        }
                     }
+
                 }
             }
         },
@@ -81,18 +98,16 @@ def get_comments_by_post_id(post_id, current_user):
             sql = "SELECT id, user_id, post_id, parent_id, content FROM post_comment WHERE post_id = %s ORDER BY id ASC"
             cursor.execute(sql, (post_id,))
             comments_raw = cursor.fetchall()
-            
+
+            # If no comments are found, return an empty list with 200 OK
             if not comments_raw:
-                return jsonify({'message': 'No comments found for this post'}), 404
-            
-            # Add username to each comment
+                return jsonify({'comments': []})
+
             for comment in comments_raw:
                 comment['username'] = get_username_by_id(comment['user_id'])
 
-            # Build hierarchical tree
             comment_tree = build_comment_tree(comments_raw)
-            
-            return jsonify(comment_tree)
+            return jsonify({'comments': comment_tree})
                 
     except pymysql.Error as e:
         print(f"Database error in get_comments_by_post_id: {e}")
@@ -125,9 +140,9 @@ def get_comments_by_post_id(post_id, current_user):
             'required': True,
             'schema': {
                 'type': 'object',
-                'required': ['post_id', 'content'],
+                'required': ['user_id', 'post_id', 'content'],
                 'properties': {
-
+                    'user_id': {'type': 'integer', 'description': '用户ID'},
                     'post_id': {'type': 'integer', 'description': '文章ID'},
                     'content': {'type': 'string', 'description': '评论内容'},
                     'parent_id': {'type': ['integer', 'null'], 'description': '父评论ID (可选)'}
@@ -143,7 +158,7 @@ def add_comment(current_user):
     content = data.get('content')
     parent_id = data.get('parent_id') # Optional
 
-    if not all([post_id, content]):
+    if not all([user_id, post_id, content]):
         return jsonify({'error': 'Missing required parameters: user_id, post_id, content'}), 400
 
     conn = get_db_connection()
