@@ -2,12 +2,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
-import About from '../components/About.vue'
+import About from '../components/common/About.vue';
 import PostList from '../components/post/PostList.vue'
 import ProjectList from '../components/project/ProjectList.vue'
 import PostDetail from '../components/post/PostDetail.vue'
 import ProjectDetail from '../components/project/ProjectDetail.vue'
-import PersonalActivity from '../components/PersonalActivity.vue'
+import MomentList from '../components/moment/MomentList.vue'
 import AIDialogue from '../components/ai/AIDialogue.vue'
 
 const router = createRouter({
@@ -55,9 +55,9 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
-          path: 'personal-activity',
-          name: 'personal-activity',
-          component: PersonalActivity,
+          path: 'monetlist',
+          name: 'monetlist',
+          component: MomentList,
           meta: { requiresAuth: true },
         },
         {

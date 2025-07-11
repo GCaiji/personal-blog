@@ -19,7 +19,7 @@
         <el-icon><setting /></el-icon>
         <span>个人项目</span>
       </el-menu-item>
-      <el-menu-item index="/home/personal-activity">
+      <el-menu-item index="/home/monetlist">
         <el-icon><icon-menu /></el-icon>
         <span>个人动态</span>
       </el-menu-item>

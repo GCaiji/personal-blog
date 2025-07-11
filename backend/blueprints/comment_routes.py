@@ -78,7 +78,7 @@ def get_comments_by_post_id(post_id, current_user):
     
     try:
         with conn.cursor() as cursor:
-            sql = "SELECT id, user_id, post_id, parent_id, content FROM comment WHERE post_id = %s ORDER BY id ASC"
+            sql = "SELECT id, user_id, post_id, parent_id, content FROM post_comment WHERE post_id = %s ORDER BY id ASC"
             cursor.execute(sql, (post_id,))
             comments_raw = cursor.fetchall()
             
@@ -152,7 +152,7 @@ def add_comment(current_user):
 
     try:
         with conn.cursor() as cursor:
-            sql = "INSERT INTO comment (user_id, post_id, content, parent_id) VALUES (%s, %s, %s, %s)"
+            sql = "INSERT INTO post_comment (user_id, post_id, content, parent_id) VALUES (%s, %s, %s, %s)"
             cursor.execute(sql, (user_id, post_id, content, parent_id))
             conn.commit()
             new_comment_id = cursor.lastrowid
