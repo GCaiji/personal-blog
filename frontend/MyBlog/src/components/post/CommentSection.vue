@@ -27,7 +27,7 @@
 
 <script setup>
 import { ref, onMounted, defineProps } from 'vue';
-import CommentItem from './CommentItem.vue';
+import CommentItem from '../post/CommentItem.vue';
 import axios from 'axios';
 import { ElCard, ElInput, ElButton, ElMessage, ElEmpty } from 'element-plus';
 

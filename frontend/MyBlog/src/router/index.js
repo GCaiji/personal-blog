@@ -3,10 +3,12 @@ import HomeView from '../views/HomeView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import About from '../components/About.vue'
-import PostList from '../components/PostList.vue'
-import ProjectList from '../components/ProjectList.vue'
-import PostDetail from '../components/PostDetail.vue'
-import ProjectDetail from '../components/ProjectDetail.vue'
+import PostList from '../components/post/PostList.vue'
+import ProjectList from '../components/project/ProjectList.vue'
+import PostDetail from '../components/post/PostDetail.vue'
+import ProjectDetail from '../components/project/ProjectDetail.vue'
+import PersonalActivity from '../components/PersonalActivity.vue'
+import AIDialogue from '../components/ai/AIDialogue.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -50,6 +52,18 @@ const router = createRouter({
           name: 'project-detail',
           component: ProjectDetail,
           props: true,
+          meta: { requiresAuth: true },
+        },
+        {
+          path: 'personal-activity',
+          name: 'personal-activity',
+          component: PersonalActivity,
+          meta: { requiresAuth: true },
+        },
+        {
+          path: 'ai-dialogue',
+          name: 'ai-dialogue',
+          component: AIDialogue,
           meta: { requiresAuth: true },
         },
       ],

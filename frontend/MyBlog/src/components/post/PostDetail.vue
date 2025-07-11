@@ -32,7 +32,7 @@ import { defineComponent, ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import axios from 'axios';
 import { ElMessage, ElButton } from 'element-plus';
-import CommentSection from './CommentSection.vue';
+import CommentSection from '../common/CommentSection.vue';
 import { ArrowUp, ArrowDown } from '@element-plus/icons-vue';
 
 

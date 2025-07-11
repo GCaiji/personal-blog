@@ -19,6 +19,14 @@
         <el-icon><setting /></el-icon>
         <span>个人项目</span>
       </el-menu-item>
+      <el-menu-item index="/home/personal-activity">
+        <el-icon><icon-menu /></el-icon>
+        <span>个人动态</span>
+      </el-menu-item>
+      <el-menu-item index="/home/ai-dialogue">
+        <el-icon><icon-menu /></el-icon>
+        <span>AI对话</span>
+      </el-menu-item>
     </el-menu>
   </div>
 </template>
