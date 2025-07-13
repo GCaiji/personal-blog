@@ -135,8 +135,12 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
+  display: -moz-box; /* 确保跨浏览器兼容 */
   -webkit-line-clamp: 3;
+  line-clamp: 3; /* 新增标准属性 */
   -webkit-box-orient: vertical;
+  -moz-box-orient: vertical; /* 兼容旧版 Firefox */
+  box-orient: vertical; /* 标准属性 */
 }
 
 .post-card:hover {
