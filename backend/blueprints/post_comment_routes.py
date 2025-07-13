@@ -230,6 +230,15 @@ def get_comments_by_post_id(post_id, current_user):
             # 关键修改：查询所有属于这些一级评论的子评论（无论层级）
             # 使用JOIN找到最顶层的父评论ID（即一级评论ID）
             sql_replies = """
+                WITH RECURSIVE comment_path (id, parent_id) AS (
+                    SELECT id, parent_id
+                    FROM post_comment
+                    WHERE parent_id IS NULL AND post_id = %s
+                    UNION ALL
+                    SELECT pc.id, pc.parent_id
+                    FROM post_comment pc
+                    INNER JOIN comment_path cp ON pc.parent_id = cp.id
+                )
                 SELECT 
                     pc.id, 
                     pc.user_id, 
@@ -237,28 +246,17 @@ def get_comments_by_post_id(post_id, current_user):
                     pc.parent_id, 
                     pc.content,
                     COALESCE(u.username, '匿名用户') AS username,
-                    # 找到实际的一级评论ID
-                    COALESCE(
-                        (SELECT root.id FROM (
-                            WITH RECURSIVE comment_path (id, parent_id) AS (
-                                SELECT id, parent_id
-                                FROM post_comment
-                                WHERE id = pc.parent_id
-                                UNION ALL
-                                SELECT c.id, c.parent_id
-                                FROM post_comment c
-                                JOIN comment_path cp ON c.id = cp.parent_id
-                            ) SELECT id, parent_id FROM comment_path WHERE parent_id IS NULL
-                        ) AS root),
-                        pc.parent_id
-                    ) AS root_comment_id
+                    cp.id AS root_comment_id
                 FROM post_comment pc
                 LEFT JOIN user u ON pc.user_id = u.id
+                INNER JOIN comment_path cp ON cp.id = (
+                    SELECT id FROM comment_path WHERE parent_id IS NULL AND id = cp.id
+                )
                 WHERE pc.post_id = %s
                   AND pc.parent_id IS NOT NULL
                 ORDER BY pc.create_time ASC
             """
-            cursor.execute(sql_replies, (post_id,))
+            cursor.execute(sql_replies, (post_id, post_id))
             all_replies = cursor.fetchall()
             
             # 将回复分组到对应的根评论ID下
@@ -272,7 +270,7 @@ def get_comments_by_post_id(post_id, current_user):
                         'id': reply['id'],
                         'user_id': reply['user_id'],
                         'post_id': reply['post_id'],
-                        'parent_id': root_id,  # 关键修改：将父ID重写为一级评论ID
+                        'parent_id': reply['parent_id'],  # 保持原始父ID，支持多级嵌套
                         'content': reply['content'],
                         'username': reply['username']
                     }
