@@ -6,6 +6,7 @@
       </p>
       <p class="comment-content">{{ comment.content }}</p>
       <el-button type="primary" size="small" @click="toggleReplyForm(comment.id)">回复</el-button>
+      <el-button v-if="userRole === 'author'" type="danger" size="small" @click="deleteComment(comment.id)">删除</el-button>
     </div>
 
     <el-collapse-transition>
@@ -43,7 +44,7 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits } from 'vue';
+import { ref, defineProps, defineEmits, onMounted } from 'vue';
 import axios from 'axios';
 import { ElCard, ElButton, ElInput, ElMessage, ElCollapseTransition } from 'element-plus';
 
@@ -63,6 +64,17 @@ const emit = defineEmits(['comment-added']);
 const showReplyForm = ref(false);
 const replyContent = ref('');
 const showReplies = ref(false);
+const userRole = ref('guest');
+
+const fetchUserRole = async () => {
+  try {
+    const response = await axios.get('/api/userinfo');
+    userRole.value = response.data.role || 'guest';
+  } catch (error) {
+    console.error('获取用户角色失败:', error);
+    userRole.value = 'guest';
+  }
+};
 
 const toggleReplyForm = () => {
   showReplyForm.value = !showReplyForm.value;
@@ -105,6 +117,24 @@ const submitReply = async (parentId, parentUsername) => {
     ElMessage.error('提交回复失败，请稍后再试。');
   }
 };
+
+const deleteComment = async (commentId) => {
+  if (!confirm('确定要删除这条评论吗？')) {
+    return;
+  }
+  try {
+    await axios.delete(`/api/comments/${commentId}`);
+    ElMessage.success('评论删除成功');
+    emit('comment-added');
+  } catch (error) {
+    ElMessage.error('删除评论失败: ' + (error.response?.data?.error || error.message));
+  }
+};
+
+onMounted(() => {
+  fetchUserRole();
+});
+
 </script>
 
 <style scoped>

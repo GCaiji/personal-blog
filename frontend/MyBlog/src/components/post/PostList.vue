@@ -8,12 +8,13 @@
       <p>暂无文章。</p>
     </div>
     <div v-else class="posts-grid">
-      <!-- <p>文章数量: {{ posts.length }}</p> -->
-      <div v-for="post in posts" :key="post.id" class="post-card" @click="goToPostDetail(post.id)">
-        <h2>{{ post.title }}</h2>
+      <div v-for="post in posts" :key="post.id" @click="goToPostDetail(post.id)" class="post-card">
+        <h2 class="post-title" :title="post.title">{{ post.title }}</h2>
+        <p class="post-excerpt">{{ post.content.length > 100 ? post.content.slice(0, 100) + '...' : post.content }}</p>
         <div class="post-meta">
           <span><i class="fas fa-thumbs-up"></i> {{ post.like_count }}</span>
           <span><i class="fas fa-comments"></i> {{ post.comment_count }}</span>
+          <button v-if="userRole === 'author'" @click.stop="deletePost(post.id)" class="delete-button">删除</button>
         </div>
       </div>
     </div>
@@ -27,23 +28,53 @@ import { useRouter } from 'vue-router';
 
 const posts = ref([]);
 const loading = ref(true); // 新增 loading 状态
+const userRole = ref('guest');
 const router = useRouter();
 
 const goToPostDetail = (postId) => {
   router.push({ name: 'post-detail', params: { post_id: postId } });
 };
 
-onMounted(async () => {
+const fetchUserRole = async () => {
+  try {
+    const response = await axios.get('/api/userinfo');
+    userRole.value = response.data.role || 'guest';
+  } catch (error) {
+    console.error('获取用户角色失败:', error);
+    userRole.value = 'guest';
+  }
+};
+
+const fetchPosts = async () => {
+  loading.value = true;
   try {
     const response = await axios.get('/api/posts');
     posts.value = response.data;
-    console.log('获取到的文章数据:', posts.value);
   } catch (error) {
     console.error('获取文章列表失败:', error);
   } finally {
-    loading.value = false; // 数据加载完成后设置 loading 为 false
+    loading.value = false;
   }
+};
+
+const deletePost = async (postId) => {
+  if (!confirm('确定要删除这篇文章吗？')) {
+    return;
+  }
+  try {
+    await axios.delete(`/api/post/${postId}`);
+    alert('文章删除成功');
+    fetchPosts();
+  } catch (error) {
+    alert('删除文章失败: ' + (error.response?.data?.error || error.message));
+  }
+};
+
+onMounted(() => {
+  fetchUserRole();
+  fetchPosts();
 });
+
 </script>
 
 <style scoped>
@@ -69,9 +100,7 @@ h1 {
 }
 
 .posts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 25px;
+  display: block;
 }
 
 .post-card {
@@ -79,37 +108,41 @@ h1 {
   border-radius: 10px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
   padding: 20px;
+  margin-bottom: 20px;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  height: 120px;
-  width: 300px;
+  justify-content: flex-start;
+  width: 100%;
   overflow: hidden;
 }
 
-.post-card h2 {
+.post-title {
   color: #007bff;
   font-size: 1.8em;
-  margin-top: 0;
-  margin-bottom: 15px;
+  font-weight: bold;
+  margin: 0 0 10px 0;
   white-space: nowrap;
-  text-overflow: ellipsis;
   overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.post-excerpt {
+  font-size: 1em;
+  color: #555;
+  margin: 0 0 15px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 .post-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-  overflow: visible;
   z-index: 100;
-}
-
-.post-card:hover h2 {
-  white-space: normal;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  padding: 8px;
 }
 
 .post-meta {
@@ -118,7 +151,7 @@ h1 {
   gap: 15px;
   color: #777;
   font-size: 0.9em;
-  margin-top: 15px;
+  margin-top: auto;
 }
 
 .post-meta span {
@@ -137,29 +170,32 @@ h1 {
   font-size: 1.2em;
   margin-top: 50px;
 }
-</style>
+.delete-button {
+  background-color: #ff4d4f;
+  border: none;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  margin-left: 0;
+  align-self: flex-start;
+  transition: background-color 0.3s ease;
+}
 
-<style scoped>
-.post-card h2 {
-  font-size: 1.4em;
-  line-height: 1.4;
-  max-height: 100px;
-  padding-right: 5px;
+.delete-button:hover {
+  background-color: #d9363e;
 }
 
 .post-card:hover h2 {
-  position: absolute;
-  white-space: normal;
-  width: 280px;
-  left: 10px;
-  top: 10px;
-  background: white;
-  padding: 10px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-  transition: all 0.3s ease;
+  position: static;
+  white-space: nowrap;
+  width: auto;
+  background: none;
+  box-shadow: none;
+  padding: 0;
 }
 
-.post-card {
-  position: relative;
-}
 </style>
+
+
