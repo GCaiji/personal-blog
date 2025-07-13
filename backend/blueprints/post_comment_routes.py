@@ -35,6 +35,68 @@ def get_username_by_id(user_id):
     finally:
         conn.close()
 
+
+@post_comment_bp.route('/comments/<int:comment_id>', methods=['DELETE'])
+@jwt_required
+@swag_from({
+    'tags': ['Comment'],
+    'security': [{'BearerAuth': []}],
+    'parameters': [
+        {
+            'name': 'comment_id',
+            'in': 'path',
+            'type': 'integer',
+            'required': True,
+            'description': '评论ID'
+        }
+    ],
+    'responses': {
+        200: {'description': '评论删除成功'},
+        403: {'description': '无权限删除此评论'},
+        404: {'description': '评论未找到'},
+        500: {'description': '数据库连接失败或数据库错误'}
+    }
+})
+def delete_comment(comment_id, current_user):
+    user_id = current_user['user_id']
+
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({'error': 'Database connection failed'}), 500
+
+    try:
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+            # 1. Check if the comment exists and get its post_id and user_id
+            cursor.execute("SELECT user_id, post_id FROM post_comment WHERE id = %s", (comment_id,))
+            comment_info = cursor.fetchone()
+
+            if not comment_info:
+                return jsonify({'error': '评论未找到'}), 404
+
+            # 2. Verify ownership
+            if comment_info['user_id'] != user_id:
+                return jsonify({'error': '无权限删除此评论'}), 403
+
+            post_id = comment_info['post_id']
+
+            # 3. Delete the comment
+            sql_delete_comment = "DELETE FROM post_comment WHERE id = %s"
+            cursor.execute(sql_delete_comment, (comment_id,))
+            
+            # Update article comment count
+            sql_update_post_comment_count = "UPDATE post SET comment_count = (SELECT COUNT(*) FROM post_comment WHERE post_id = %s) WHERE id = %s"
+            # 删除更新comment_count的SQL语句
+            # cursor.execute(sql_update_post_comment_count, (post_id, post_id))
+
+            conn.commit()
+            return jsonify({'message': '评论删除成功'}), 200
+
+    except pymysql.Error as e:
+        print(f"Database error in delete_comment: {e}")
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+    finally:
+        conn.close()
+
 @post_comment_bp.route('/comments/<int:post_id>', methods=['GET'])
 @jwt_required
 @swag_from({
@@ -318,7 +380,8 @@ def add_comment(current_user):
             new_comment_id = cursor.lastrowid
 
             sql_update_post = "UPDATE post SET comment_count = comment_count + 1 WHERE id = %s"
-            cursor.execute(sql_update_post, (post_id,))
+            # 删除更新comment_count的SQL语句
+            # cursor.execute(sql_update_post, (post_id,))
             conn.commit()
 
             return jsonify({'message': 'Comment added successfully', 'comment_id': new_comment_id}), 201

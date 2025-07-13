@@ -7,55 +7,6 @@ from utils.auth_utils import jwt_required, role_required
 
 post_bp = Blueprint('post_bp', __name__)
 
-@post_bp.route('/post/first', methods=['GET'])
-@jwt_required
-@swag_from({
-    'tags': ['Post'],
-    'security': [{'BearerAuth': []}],
-    'security': [{'BearerAuth': []}],
-    'security': [{'BearerAuth': []}],
-    'responses': {
-        200: {
-            'description': '成功获取第一篇文章',
-            'schema': {
-                'type': 'object',
-                'properties': {
-                    'id': {'type': 'integer', 'description': '文章ID'},
-                    'title': {'type': 'string', 'description': '文章标题'},
-                    'content': {'type': 'string', 'description': '文章内容'},
-                    'like_count': {'type': 'integer', 'description': '点赞数'},
-                    'comment_count': {'type': 'integer', 'description': '评论数'},
-
-                }
-            }
-        },
-        404: {'description': '未找到文章'},
-        500: {'description': '数据库连接失败或数据库错误'}
-    }
-})
-def get_first_post(current_user):
-    conn = get_db_connection()
-    if conn is None:
-        return jsonify({'error': 'Database connection failed'}), 500
-    
-    try:
-        with conn.cursor() as cursor:
-            sql_post = "SELECT id, title, content, like_count, comment_count FROM post ORDER BY id LIMIT 1"
-            cursor.execute(sql_post)
-            post = cursor.fetchone()
-            
-            if not post:
-                return jsonify({'error': 'No posts found'}), 404
-            
-            post_id = post['id']
-            
-            return jsonify(post)
-                    
-    except pymysql.Error as e:
-        return jsonify({'error': f'Database error: {str(e)}'}), 500
-    finally:
-        conn.close()
-
 @post_bp.route('/posts', methods=['GET'])
 @jwt_required
 @swag_from({
@@ -71,9 +22,7 @@ def get_first_post(current_user):
                     'properties': {
                         'id': {'type': 'integer', 'description': '文章ID'},
                         'title': {'type': 'string', 'description': '文章标题'},
-                        'content': {'type': 'string', 'description': '文章内容'},
-                        'like_count': {'type': 'integer', 'description': '点赞数'},
-                        'comment_count': {'type': 'integer', 'description': '评论数'},
+                        'content': {'type': 'string', 'description': '文章内容'}
                     }
                 }
             }
@@ -88,9 +37,33 @@ def get_all_posts(current_user):
     
     try:
         with conn.cursor() as cursor:
-            sql_posts = "SELECT id, title, content, like_count, comment_count FROM post ORDER BY id ASC"
+            # 只获取基本字段，移除计数字段
+            sql_posts = "SELECT id, title, content FROM post ORDER BY id ASC"
             cursor.execute(sql_posts)
             posts = cursor.fetchall()
+            
+            # 为每篇文章实时计算
+            for post in posts:
+                post_id = post['id']
+                
+                # 实时计算点赞数
+                sql_likes = "SELECT COUNT(*) as like_count FROM post_like WHERE post_id = %s"
+                cursor.execute(sql_likes, (post_id,))
+                result = cursor.fetchone()
+                like_count = result['like_count'] if result else 0
+                
+                # 实时计算评论数
+                # 删除所有包含comment_count的字段引用
+                # 确保所有统计都通过COUNT实现
+                sql_comments = "SELECT COUNT(*) as comment_count FROM post_comment WHERE post_id = %s"
+                cursor.execute(sql_comments, (post_id,))
+                result = cursor.fetchone()
+                comment_count = result['comment_count'] if result else 0
+                
+                # 添加计算值
+                post['like_count'] = like_count
+                post['comment_count'] = comment_count
+            
             return jsonify(posts)
                 
     except pymysql.Error as e:
@@ -172,17 +145,11 @@ def like_post(current_user, post_id):
                 """ 
                 cursor.execute(sql_delete_like, (existing_like['id'],)) 
                 
-                # 3.2 更新文章点赞计数 
-                sql_decrement_likes = """ 
-                    UPDATE post 
-                    SET like_count = GREATEST(like_count - 1, 0) 
-                    WHERE id = %s 
-                """ 
-                cursor.execute(sql_decrement_likes, (post_id,)) 
-                
-                # 3.3 获取更新后的点赞数 
-                cursor.execute("SELECT like_count FROM post WHERE id = %s", (post_id,)) 
-                updated_count = cursor.fetchone()['like_count'] 
+                # 3.2 移除更新文章点赞计数
+                # 4.2 移除更新文章点赞计数
+                # 获取实时点赞数
+                cursor.execute("SELECT COUNT(*) as like_count FROM post_like WHERE post_id = %s", (post_id,))
+                updated_count = cursor.fetchone()['like_count']
                 
                 conn.commit() 
                 return jsonify({ 
@@ -281,8 +248,8 @@ def create_post(current_user):
 
     try:
         with conn.cursor() as cursor:
-            sql = "INSERT INTO post (title, content, user_id, like_count, comment_count) VALUES (%s, %s, %s, %s, %s)"
-            cursor.execute(sql, (title, content, user_id, 0, 0))
+            sql = "INSERT INTO post (title, content, user_id) VALUES (%s, %s, %s)"
+            cursor.execute(sql, (title, content, user_id))
             conn.commit()
             return jsonify({'message': 'Post created successfully'}), 201
     except pymysql.Error as e:
@@ -430,8 +397,7 @@ def delete_post(current_user, post_id):
                 'properties': {
                     'id': {'type': 'integer', 'description': '文章ID'},
                     'title': {'type': 'string', 'description': '文章标题'},
-                    'content': {'type': 'string', 'description': '文章内容'},
-
+                    'content': {'type': 'string', 'description': '文章内容'}
                 }
             }
         },
@@ -446,14 +412,29 @@ def get_post_by_id(current_user, post_id):
     
     try:
         with conn.cursor() as cursor:
-            sql_post = "SELECT id, title, content, like_count, comment_count FROM post WHERE id = %s"
+            # 只获取基本字段，移除计数字段
+            sql_post = "SELECT id, title, content FROM post WHERE id = %s"
             cursor.execute(sql_post, (post_id,))
             post = cursor.fetchone()
             
             if not post:
                 return jsonify({'error': 'Post not found'}), 404
             
-
+            # 实时计算点赞数
+            sql_likes = "SELECT COUNT(*) as like_count FROM post_like WHERE post_id = %s"
+            cursor.execute(sql_likes, (post_id,))
+            result = cursor.fetchone()
+            like_count = result['like_count'] if result else 0
+            
+            # 实时计算评论数
+            sql_comments = "SELECT COUNT(*) as comment_count FROM post_comment WHERE post_id = %s"
+            cursor.execute(sql_comments, (post_id,))
+            result = cursor.fetchone()
+            comment_count = result['comment_count'] if result else 0
+            
+            # 添加计算值到响应
+            post['like_count'] = like_count
+            post['comment_count'] = comment_count
             
             return jsonify(post)
                 
@@ -461,6 +442,8 @@ def get_post_by_id(current_user, post_id):
         return jsonify({'error': f'Database error: {str(e)}'}), 500
     finally:
         conn.close()
+
+
 
 @post_bp.route('/post/<int:post_id>/like', methods=['POST'])
 @jwt_required
@@ -482,9 +465,32 @@ def get_posts(current_user):
     
     try:
         with conn.cursor() as cursor:
-            sql = "SELECT id, title, like_count, comment_count FROM post"
+            sql = "SELECT id, title FROM post"
             cursor.execute(sql)
             posts = cursor.fetchall()
+            for post in posts:
+                post_id = post['id']
+                # // ... existing code...
+                # 移除更新like_count字段的SQL操作
+                # sql_decrement_likes = """
+                #     UPDATE post 
+                #     SET like_count = GREATEST(like_count - 1, 0) 
+                #     WHERE id = %s 
+                # """
+                # cursor.execute(sql_decrement_likes, (post_id,))
+                
+                # sql_increment_likes = """
+                #     UPDATE post 
+                #     SET like_count = like_count + 1 
+                #     WHERE id = %s 
+                # """
+                # cursor.execute(sql_increment_likes, (post_id,))
+                cursor.execute("SELECT COUNT(*) as like_count FROM post_like WHERE post_id = %s", (post_id,))
+                result = cursor.fetchone()
+                post['like_count'] = result['like_count'] if result else 0
+                cursor.execute("SELECT COUNT(*) as comment_count FROM post_comment WHERE post_id = %s", (post_id,))
+                result = cursor.fetchone()
+                post['comment_count'] = result['comment_count'] if result else 0
             return jsonify(posts)
     except pymysql.Error as e:
         print(f"Database error in get_posts: {e}")
