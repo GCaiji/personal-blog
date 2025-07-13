@@ -47,6 +47,22 @@ def get_username_by_id(user_id):
             'type': 'integer',
             'required': True,
             'description': '文章ID'
+        },
+        {
+            'name': 'page',
+            'in': 'query',
+            'type': 'integer',
+            'required': False,
+            'default': 1,
+            'description': '当前页码，从1开始'
+        },
+        {
+            'name': 'page_size',
+            'in': 'query',
+            'type': 'integer',
+            'required': False,
+            'default': 10,
+            'description': '每页条数'
         }
     ],
     'definitions': {
@@ -74,13 +90,21 @@ def get_username_by_id(user_id):
             'schema': {
                 'type': 'object',
                 'properties': {
-                    'comments': {
+                    'data': {
                         'type': 'array',
                         'items': {
                             '$ref': '#/definitions/Comment'
                         }
+                    },
+                    'pagination': {
+                        'type': 'object',
+                        'properties': {
+                            'current_page': {'type': 'integer'},
+                            'page_size': {'type': 'integer'},
+                            'total_count': {'type': 'integer'},
+                            'total_pages': {'type': 'integer'}
+                        }
                     }
-
                 }
             }
         },
@@ -88,55 +112,135 @@ def get_username_by_id(user_id):
         500: {'description': '数据库连接失败或数据库错误'}
     }
 })
+
+
 def get_comments_by_post_id(post_id, current_user):
+    page = request.args.get('page', default=1, type=int)
+    page_size = request.args.get('page_size', default=5, type=int)
+
+    # 参数校验
+    if page < 1:
+        page = 1
+    if page_size < 1 or page_size > 100:
+        page_size = 5
+
+    offset = (page - 1) * page_size
+
     conn = get_db_connection()
     if conn is None:
         return jsonify({'error': 'Database connection failed'}), 500
     
     try:
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
-            # 修改SQL查询：一次性获取用户名
+            # 查询总一级评论数（parent_id为空）
+            count_sql = "SELECT COUNT(*) AS total_count FROM post_comment WHERE post_id = %s AND parent_id IS NULL"
+            cursor.execute(count_sql, (post_id,))
+            total_count = cursor.fetchone()['total_count']
+
+            # 分页查询一级评论（parent_id为空）
             sql = """
                 SELECT pc.id, pc.user_id, pc.post_id, pc.parent_id, pc.content, 
                     COALESCE(u.username, '匿名用户') AS username
                 FROM post_comment pc
                 LEFT JOIN user u ON pc.user_id = u.id
-                WHERE pc.post_id = %s 
-                ORDER BY pc.id ASC
+                WHERE pc.post_id = %s AND pc.parent_id IS NULL
+                ORDER BY pc.create_time ASC
+                LIMIT %s OFFSET %s
             """
-            cursor.execute(sql, (post_id,))
-            comments_raw = cursor.fetchall()
-
-            if not comments_raw:
-                return jsonify({'comments': []})
-
-            # 优化评论树构建 - 使用字典提高性能
-            comments_by_id = {}
-            root_comments = []
+            cursor.execute(sql, (post_id, page_size, offset))
+            root_comments = cursor.fetchall()
             
-            # 先创建所有评论项
-            for comment in comments_raw:
-                comment_id = comment['id']
-                comments_by_id[comment_id] = comment
-                comments_by_id[comment_id]['replies'] = []
-                
-            # 构建评论层级关系
-            for comment in comments_raw:
-                parent_id = comment['parent_id']
-                comment_id = comment['id']
-                
-                if parent_id is None:
-                    root_comments.append(comments_by_id[comment_id])
-                elif parent_id in comments_by_id:
-                    comments_by_id[parent_id]['replies'].append(comments_by_id[comment_id])
+            # 获取所有一级评论的ID列表
+            if not root_comments:
+                # 如果没有一级评论，直接返回空列表
+                return jsonify({
+                    'data': [],
+                    'pagination': {
+                        'current_page': page,
+                        'page_size': page_size,
+                        'total_count': total_count,
+                        'total_pages': (total_count + page_size - 1) // page_size
+                    }
+                })
             
-            return jsonify({'comments': root_comments})
+            root_comment_ids = [c['id'] for c in root_comments]
+            
+            # 关键修改：查询所有属于这些一级评论的子评论（无论层级）
+            # 使用JOIN找到最顶层的父评论ID（即一级评论ID）
+            sql_replies = """
+                SELECT 
+                    pc.id, 
+                    pc.user_id, 
+                    pc.post_id, 
+                    pc.parent_id, 
+                    pc.content,
+                    COALESCE(u.username, '匿名用户') AS username,
+                    # 找到实际的一级评论ID
+                    COALESCE(
+                        (SELECT root.id FROM (
+                            WITH RECURSIVE comment_path (id, parent_id) AS (
+                                SELECT id, parent_id
+                                FROM post_comment
+                                WHERE id = pc.parent_id
+                                UNION ALL
+                                SELECT c.id, c.parent_id
+                                FROM post_comment c
+                                JOIN comment_path cp ON c.id = cp.parent_id
+                            ) SELECT id, parent_id FROM comment_path WHERE parent_id IS NULL
+                        ) AS root),
+                        pc.parent_id
+                    ) AS root_comment_id
+                FROM post_comment pc
+                LEFT JOIN user u ON pc.user_id = u.id
+                WHERE pc.post_id = %s
+                  AND pc.parent_id IS NOT NULL
+                ORDER BY pc.create_time ASC
+            """
+            cursor.execute(sql_replies, (post_id,))
+            all_replies = cursor.fetchall()
+            
+            # 将回复分组到对应的根评论ID下
+            replies_map = {}
+            for reply in all_replies:
+                root_id = reply['root_comment_id']
+                # 只处理属于当前页的根评论的回复
+                if root_id in root_comment_ids:
+                    # 只保留回复的基本信息
+                    cleaned_reply = {
+                        'id': reply['id'],
+                        'user_id': reply['user_id'],
+                        'post_id': reply['post_id'],
+                        'parent_id': root_id,  # 关键修改：将父ID重写为一级评论ID
+                        'content': reply['content'],
+                        'username': reply['username']
+                    }
+                    if root_id not in replies_map:
+                        replies_map[root_id] = []
+                    replies_map[root_id].append(cleaned_reply)
+
+            # 将回复挂载到对应一级评论的replies字段
+            for comment in root_comments:
+                comment_id = comment['id']
+                comment['replies'] = replies_map.get(comment_id, [])
+
+            total_pages = (total_count + page_size - 1) // page_size
+
+            return jsonify({
+                'data': root_comments,
+                'pagination': {
+                    'current_page': page,
+                    'page_size': page_size,
+                    'total_count': total_count,
+                    'total_pages': total_pages
+                }
+            })
                 
     except pymysql.Error as e:
         print(f"Database error in get_comments_by_post_id: {e}")
         return jsonify({'error': f'Database error: {str(e)}'}), 500
     finally:
         conn.close()
+
 
 
 @post_comment_bp.route('/comments', methods=['POST'])
@@ -184,6 +288,23 @@ def add_comment(current_user):
 
     if not all([user_id, post_id, content]):
         return jsonify({'error': 'Missing required parameters: user_id, post_id, content'}), 400
+
+    # 如果是回复评论，拼接回复用户名
+    # 新增评论时，保持parent_id原样，不做扁平化处理
+    if parent_id is not None:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+        try:
+            with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+                cursor.execute("SELECT u.username FROM post_comment pc LEFT JOIN user u ON pc.user_id = u.id WHERE pc.id = %s", (parent_id,))
+                parent_comment = cursor.fetchone()
+                if parent_comment and parent_comment["username"]:
+                    content = f"回复{parent_comment['username']}：{content}"
+        except pymysql.Error as e:
+            print(f"Database error in fetching parent comment username: {e}")
+        finally:
+            conn.close()
 
     conn = get_db_connection()
     if conn is None:

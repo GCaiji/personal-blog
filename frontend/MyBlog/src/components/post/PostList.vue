@@ -83,11 +83,9 @@ h1 {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-}
-
-.post-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  height: 120px;
+  width: 300px;
+  overflow: hidden;
 }
 
 .post-card h2 {
@@ -95,7 +93,23 @@ h1 {
   font-size: 1.8em;
   margin-top: 0;
   margin-bottom: 15px;
-  word-break: break-word;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.post-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  overflow: visible;
+  z-index: 100;
+}
+
+.post-card:hover h2 {
+  white-space: normal;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  padding: 8px;
 }
 
 .post-meta {
@@ -122,5 +136,30 @@ h1 {
   color: #007bff;
   font-size: 1.2em;
   margin-top: 50px;
+}
+</style>
+
+<style scoped>
+.post-card h2 {
+  font-size: 1.4em;
+  line-height: 1.4;
+  max-height: 100px;
+  padding-right: 5px;
+}
+
+.post-card:hover h2 {
+  position: absolute;
+  white-space: normal;
+  width: 280px;
+  left: 10px;
+  top: 10px;
+  background: white;
+  padding: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  transition: all 0.3s ease;
+}
+
+.post-card {
+  position: relative;
 }
 </style>

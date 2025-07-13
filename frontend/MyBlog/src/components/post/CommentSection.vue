@@ -1,16 +1,28 @@
 <template>
   <el-card class="comment-section">
     <h3>评论</h3>
-    <el-empty v-if="comments.length === 0" description="暂无评论，快来发表第一条评论吧！"></el-empty>
+    <el-empty v-if="comments.length === 0"
+    description="暂无评论，快来发表第一条评论吧！"></el-empty>
     <div v-else class="comment-list">
       <CommentItem
         v-for="comment in comments"
         :key="comment.id"
         :comment="comment"
         :post-id="postId"
-        @comment-added="fetchComments"
+        @comment-added="handleCommentAdded"
       />
     </div>
+
+    <el-pagination
+      v-if="totalPages > 1"
+      background
+      layout="prev, pager, next, ->, total"
+      :current-page="currentPage"
+      :page-size="pageSize"
+      :total="totalPages * pageSize"
+      @current-change="handlePageChange"
+      style="text-align: center; margin-bottom: 20px;"
+    />
 
     <el-card class="comment-form">
       <h4>发表评论</h4>
@@ -40,12 +52,22 @@ const props = defineProps({
 
 const comments = ref([]);
 const newCommentContent = ref('');
+const currentPage = ref(1);
+const pageSize = ref(5);
+const totalPages = ref(1);
 
-
-const fetchComments = async () => {
+const fetchComments = async (page = 1) => {
   try {
-    const response = await axios.get(`/api/comments/${props.postId}`);
-    comments.value = response.data.comments;
+    const response = await axios.get(`/api/comments/${props.postId}`, {
+      params: {
+        page: page,
+        page_size: pageSize.value
+      }
+    });
+    comments.value = response.data.data;
+    currentPage.value = response.data.pagination.current_page;
+    pageSize.value = response.data.pagination.page_size;
+    totalPages.value = response.data.pagination.total_pages;
   } catch (error) {
     console.error('获取评论失败:', error);
     comments.value = [];
@@ -58,19 +80,16 @@ const submitComment = async () => {
     return;
   }
   try {
-    // 假设后端有一个 /api/comments 接口用于提交评论
-    // 并且需要 user_id, post_id, content, parent_id (可选)
-    // 这里 user_id 暂时写死，实际应用中应从用户会话中获取
     const response = await axios.post('/api/comments', {
-      user_id: 1, // 示例：实际应从登录用户会话中获取
+      user_id: 1,
       post_id: props.postId,
       content: newCommentContent.value,
-      parent_id: null // For top-level comments
+      parent_id: null
     });
     if (response.status === 201) {
       ElMessage.success('评论提交成功！');
       newCommentContent.value = '';
-      fetchComments(); // 重新加载评论以显示新评论
+      fetchComments(currentPage.value); // 添加评论后重新加载当前页
     } else {
       ElMessage.error('评论提交失败！');
     }
@@ -78,6 +97,15 @@ const submitComment = async () => {
     console.error('提交评论失败:', error);
     ElMessage.error('提交评论失败，请稍后再试。');
   }
+};
+
+const handlePageChange = (page) => {
+  fetchComments(page);
+};
+
+const handleCommentAdded = () => {
+  // 删除评论后重新加载当前页，且检查总页数变化
+  fetchComments(currentPage.value);
 };
 
 

@@ -23,14 +23,21 @@
       </div>
     </el-collapse-transition>
 
-    <div v-if="comment.replies && comment.replies.length" class="comment-replies">
-      <CommentItem
-        v-for="reply in comment.replies"
-        :key="reply.id"
-        :comment="reply"
-        :post-id="postId"
-        @comment-added="$emit('comment-added')"
-      />
+    <div v-if="comment.replies && comment.replies.length">
+      <el-button type="text" size="small" @click="toggleReplies">
+        {{ showReplies ? '收起回复' : `展开回复 (${comment.replies.length})` }}
+      </el-button>
+      <transition name="fade">
+        <div v-show="showReplies" class="comment-replies">
+          <CommentItem
+            v-for="reply in comment.replies"
+            :key="reply.id"
+            :comment="reply"
+            :post-id="postId"
+            @comment-added="$emit('comment-added')"
+          />
+        </div>
+      </transition>
     </div>
   </el-card>
 </template>
@@ -55,10 +62,15 @@ const emit = defineEmits(['comment-added']);
 
 const showReplyForm = ref(false);
 const replyContent = ref('');
+const showReplies = ref(false);
 
 const toggleReplyForm = () => {
   showReplyForm.value = !showReplyForm.value;
-  replyContent.value = ''; // Clear previous reply content
+  replyContent.value = '';
+};
+
+const toggleReplies = () => {
+  showReplies.value = !showReplies.value;
 };
 
 const cancelReply = () => {
@@ -76,7 +88,7 @@ const submitReply = async (parentId, parentUsername) => {
     const response = await axios.post('/api/comments', {
       user_id: 1,
       post_id: props.postId,
-      content: replyContent.value,  // 移除回复前缀
+      content: `${replyContent.value}`,
       parent_id: parentId
     });
 
