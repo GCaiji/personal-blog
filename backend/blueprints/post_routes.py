@@ -470,21 +470,7 @@ def get_posts(current_user):
             posts = cursor.fetchall()
             for post in posts:
                 post_id = post['id']
-                # // ... existing code...
-                # 移除更新like_count字段的SQL操作
-                # sql_decrement_likes = """
-                #     UPDATE post 
-                #     SET like_count = GREATEST(like_count - 1, 0) 
-                #     WHERE id = %s 
-                # """
-                # cursor.execute(sql_decrement_likes, (post_id,))
-                
-                # sql_increment_likes = """
-                #     UPDATE post 
-                #     SET like_count = like_count + 1 
-                #     WHERE id = %s 
-                # """
-                # cursor.execute(sql_increment_likes, (post_id,))
+               
                 cursor.execute("SELECT COUNT(*) as like_count FROM post_like WHERE post_id = %s", (post_id,))
                 result = cursor.fetchone()
                 post['like_count'] = result['like_count'] if result else 0

@@ -11,6 +11,8 @@ from blueprints.auth_routes import auth_bp
 from blueprints.project_routes import project_bp
 from blueprints.post_comment_routes import post_comment_bp
 from blueprints.user_routes import user_bp
+from blueprints.moment_routes import moment_bp
+from blueprints.moment_image_routes import moment_image_bp
 
 
 app = Flask(__name__, static_folder='../frontend/MyBlog/dist', static_url_path='/')
@@ -38,7 +40,8 @@ app.register_blueprint(auth_bp, url_prefix='/api')
 app.register_blueprint(project_bp, url_prefix='/api')
 app.register_blueprint(post_comment_bp, url_prefix='/api')
 app.register_blueprint(user_bp, url_prefix='/api')
-
+app.register_blueprint(moment_bp, url_prefix='/api')
+app.register_blueprint(moment_comment_bp, url_prefix='/api')
 
 # 提供前端静态文件
 @app.route('/')

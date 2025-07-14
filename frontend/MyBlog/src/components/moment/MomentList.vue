@@ -9,39 +9,39 @@
         <h1>我的动态</h1>
       </header>
 
-      <section class="moment-post-box">
-        <div class="user-avatar"></div>
-        <textarea v-model="newMomentContent" placeholder="分享新鲜事..." class="moment-textarea"></textarea>
-        <div class="post-actions">
-          <button @click="postMoment" class="post-button">发布</button>
-        </div>
-      </section>
+      <MomentPostBox @post-moment="handlePostMoment" />
 
       <section class="moment-list">
         <div v-for="moment in moments" :key="moment.id" class="moment-item">
           <div class="moment-header">
-            <div class="user-avatar"></div>
-            <div class="user-info">
-              <span class="username">{{ moment.username }}</span>
-              <span class="timestamp">{{ moment.timestamp }}</span>
-            </div>
+            <div class="user-avatar">
+            <img src="@/assets/images/Logos/DefaultLogo.svg" alt="User Avatar" class="avatar-img" />
+          </div>
+          <div class="user-info">
+            <span class="username">{{ moment.user.username }}</span>
+            <span class="timestamp">{{ new Date(moment.publish_time).toLocaleString('zh-CN', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) }}</span>
+          </div>
           </div>
           <div class="moment-content">
             <p>{{ moment.content }}</p>
             <div v-if="moment.images && moment.images.length" class="moment-images">
-              <img v-for="image in moment.images" :src="image" :key="image" class="moment-image" />
+              <img v-for="image in moment.images" :src="`http://localhost:5000${image}`" :key="image" class="moment-image" />
             </div>
           </div>
           <div class="moment-actions">
-            <span class="action-item"><i class="icon-like"></i> 赞 ({{ moment.likes }})</span>
-            <span class="action-item"><i class="icon-comment"></i> 评论 ({{ moment.comments.length }})</span>
+            <span class="action-item" @click="toggleLike(moment)"><i class="icon-like"></i> 赞 ({{ moment.likes }})</span>
+            <span class="action-item" @click="toggleCommentBox(moment)"><i class="icon-comment"></i> 评论 ({{ moment.comments.length }})</span>
             <span class="action-item"><i class="icon-share"></i> 转发</span>
           </div>
           <div class="moment-comments">
             <div v-for="comment in moment.comments" :key="comment.id" class="comment-item">
-              <span class="comment-user">{{ comment.username }}:</span>
-              <span class="comment-text">{{ comment.text }}</span>
+              <span class="comment-user">{{ (comment.user && comment.user.username) ? comment.user.username : '未知用户' }}:</span>
+              <span class="comment-text">{{ comment.content }}</span>
             </div>
+          </div>
+          <div v-if="showCommentBox === moment.id" class="comment-input-box">
+            <input type="text" v-model="commentContent" @keyup.enter="postComment(moment)" placeholder="发表评论..." />
+            <button @click="postComment(moment)">评论</button>
           </div>
         </div>
       </section>
@@ -54,52 +54,117 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import axios from 'axios';
 import AppCenter from './AppCenter.vue';
 import SignInCard from './SignInCard.vue';
+import MomentPostBox from './MomentPostBox.vue';
 
-const newMomentContent = ref('');
-const moments = ref([
-  {
-    id: 1,
-    username: '用户A',
-    timestamp: '2023-10-26 10:30',
-    content: '今天天气真好，适合出去走走！',
-    images: ['https://via.placeholder.com/150/FF0000/FFFFFF?text=Image1'],
-    likes: 15,
-    comments: [
-      { id: 101, username: '用户B', text: '是啊，阳光明媚！' },
-      { id: 102, username: '用户C', text: '羡慕ing~' }
-    ]
-  },
-  {
-    id: 2,
-    username: '用户D',
-    timestamp: '2023-10-25 18:00',
-    content: '分享一首最近很喜欢的歌，希望大家也喜欢。',
-    images: [],
-    likes: 8,
-    comments: [
-      { id: 201, username: '用户E', text: '好听！求歌名！' }
-    ]
-  }
-]);
+const moments = ref([]);
 
-const postMoment = () => {
-  if (newMomentContent.value.trim() !== '') {
-    const newId = moments.value.length > 0 ? Math.max(...moments.value.map(m => m.id)) + 1 : 1;
-    moments.value.unshift({
-      id: newId,
-      username: '当前用户',
-      timestamp: new Date().toLocaleString(),
-      content: newMomentContent.value.trim(),
-      images: [],
-      likes: 0,
-      comments: []
-    });
-    newMomentContent.value = '';
+
+const handlePostMoment = async (content) => {
+  if (content.trim() !== '') {
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await axios.post('http://localhost:5000/api/moments', { content: content.trim() }, { headers });
+      if (response.data.code === 200) {
+        // Assuming the backend returns the newly created moment data
+        const newMoment = response.data.data;
+        moments.value.unshift({
+          id: newMoment.id,
+          user: newMoment.user,
+          publish_time: newMoment.publish_time,
+          content: newMoment.content,
+          images: newMoment.images || [],
+          likes: newMoment.likes_count,
+          comments: newMoment.comments || []
+        });
+      } else {
+        console.error('Error posting moment:', response.data.message);
+      }
+    } catch (error) {
+      console.error('Error posting moment:', error);
+    }
   }
 };
+
+const fetchMoments = async () => {
+  try {
+    const token = localStorage.getItem('jwt_token');
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await axios.get('http://localhost:5000/api/moments', { headers });
+    console.log('Backend response for moments:', response.data);
+    moments.value = response.data.moments.map(moment => ({
+      id: moment.id,
+      user: moment.user,
+      publish_time: moment.publish_time,
+      content: moment.content,
+      images: moment.images || [],
+      likes: moment.likes_count,
+      comments: moment.comments || []
+    }));
+  } catch (error) {
+    console.error('Error fetching moments:', error);
+    // Handle error, e.g., show a message to the user
+  }
+};
+
+
+
+const commentContent = ref('');
+const showCommentBox = ref(null);
+
+const toggleCommentBox = (moment) => {
+  if (showCommentBox.value === moment.id) {
+    showCommentBox.value = null;
+  } else {
+    showCommentBox.value = moment.id;
+  }
+};
+
+const postComment = async (moment) => {
+  if (commentContent.value.trim() !== '') {
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await axios.post(`http://localhost:5000/api/moments/${moment.id}/comment`, { content: commentContent.value.trim() }, { headers });
+      if (response.data.code === 200) {
+        moment.comments.push(response.data.data);
+        commentContent.value = '';
+        showCommentBox.value = null;
+      } else {
+        console.error('Error posting comment:', response.data.message);
+      }
+    } catch (error) {
+      console.error('Error posting comment:', error);
+    }
+  }
+};
+
+const toggleLike = async (moment) => {
+  try {
+    const token = localStorage.getItem('jwt_token');
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await axios.post(`http://localhost:5000/api/moments/${moment.id}/like`, {}, { headers });
+    if (response.data.code === 200) {
+      moment.likes = response.data.data.likes_count;
+    } else {
+      console.error('Error toggling like:', response.data.message);
+    }
+  } catch (error) {
+    console.error('Error toggling like:', error);
+  }
+};
+
+
+
+onMounted(async () => {
+
+
+  fetchMoments();
+});
 </script>
 
 <style scoped>
@@ -133,55 +198,7 @@ const postMoment = () => {
   color: #333;
 }
 
-.moment-post-box {
-  display: flex;
-  align-items: flex-start;
-  background-color: #fff;
-  padding: 15px;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  margin-bottom: 20px;
-}
 
-.moment-post-box .user-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: #409eff; /* 模拟头像 */
-  margin-right: 15px;
-  flex-shrink: 0;
-}
-
-.moment-textarea {
-  flex-grow: 1;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  padding: 10px;
-  font-size: 14px;
-  min-height: 60px;
-  resize: vertical;
-  margin-right: 10px;
-}
-
-.post-actions {
-  display: flex;
-  align-items: center;
-}
-
-.post-button {
-  background-color: #409eff;
-  color: white;
-  border: none;
-  padding: 8px 15px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.3s ease;
-}
-
-.post-button:hover {
-  background-color: #337ecc;
-}
 
 .moment-list {
   display: flex;
@@ -206,8 +223,14 @@ const postMoment = () => {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background-color: #67c23a; /* 模拟头像 */
   margin-right: 10px;
+  overflow: hidden;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .user-info {
@@ -236,19 +259,45 @@ const postMoment = () => {
   color: #333;
 }
 
-.moment-images {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 8px;
+.comment-input-box {
+  display: flex;
   margin-top: 10px;
 }
 
-.moment-image {
-  width: 100%;
-  height: 100px;
-  object-fit: cover;
+.comment-input-box input {
+  flex-grow: 1;
+  padding: 8px;
+  border: 1px solid #ddd;
   border-radius: 4px;
+  margin-right: 8px;
 }
+
+.comment-input-box button {
+  background-color: #409eff;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.comment-input-box button:hover {
+  background-color: #66b1ff;
+}
+
+.moment-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 10px;
+  }
+
+  .moment-image {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 4px;
+  }
 
 .moment-actions {
   display: flex;
