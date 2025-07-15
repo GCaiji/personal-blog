@@ -41,7 +41,7 @@ app.register_blueprint(project_bp, url_prefix='/api')
 app.register_blueprint(post_comment_bp, url_prefix='/api')
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(moment_bp, url_prefix='/api')
-app.register_blueprint(moment_comment_bp, url_prefix='/api')
+app.register_blueprint(moment_image_bp, url_prefix='/api')
 
 # 提供前端静态文件
 @app.route('/')
