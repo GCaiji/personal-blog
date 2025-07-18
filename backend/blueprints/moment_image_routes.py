@@ -46,9 +46,7 @@ moment_image_bp = Blueprint('moment_image_bp', __name__)
     }
 })
 def get_moment_images(current_user, moment_id):
-    """
-    获取特定动态的所有图片及排列顺序
-    """
+
     conn = get_db_connection()
     if not conn:
         return jsonify({'success': False, 'error': '数据库连接失败'}), 500
@@ -144,18 +142,22 @@ def get_moment_images(current_user, moment_id):
     }
 })
 def add_moment_image(current_user, moment_id):
-    """
-    向动态添加新图片
-    """
-    data = request.get_json()
-    image_url = data.get('image_url')
-    display_order = data.get('display_order', 1)  # 默认显示顺序为1
 
-    if not image_url:
+    if 'image' not in request.files:
         return jsonify({
             'success': False,
-            'error': '缺少图片URL',
-            'error_code': 'IMAGE_URL_REQUIRED'
+            'error': '缺少图片文件',
+            'error_code': 'IMAGE_FILE_REQUIRED'
+        }), 400
+
+    image_file = request.files['image']
+    display_order = request.form.get('display_order', 1)  # 从表单数据中获取显示顺序
+
+    if image_file.filename == '':
+        return jsonify({
+            'success': False,
+            'error': '未选择图片文件',
+            'error_code': 'NO_IMAGE_SELECTED'
         }), 400
 
     conn = get_db_connection()
@@ -165,32 +167,35 @@ def add_moment_image(current_user, moment_id):
     try:
         with conn.cursor() as cursor:
             # 验证动态存在且用户有权操作
-            cursor.execute("SELECT user_id FROM moment WHERE id = %s", (moment_id,))
-            moment = cursor.fetchone()
-            
-            if not moment:
+            cursor.execute("SELECT id FROM moment WHERE id = %s", (moment_id,))
+            if not cursor.fetchone():
                 return jsonify({
                     'success': False,
                     'error': '动态不存在',
                     'error_code': 'MOMENT_NOT_FOUND'
                 }), 404
-                
-            # 检查当前用户是否是动态所有者
-            if moment['user_id'] != current_user['user_id']:
-                return jsonify({
-                    'success': False,
-                    'error': '无权操作此动态',
-                    'error_code': 'PERMISSION_DENIED'
-                }), 403
 
             # 插入新图片
+            import os
+            from werkzeug.utils import secure_filename
+            
+            UPLOAD_FOLDER = os.path.abspath('../../frontend/MyBlog/src/assets/Images/Moments')
+            if not os.path.exists(UPLOAD_FOLDER):
+                os.makedirs(UPLOAD_FOLDER)
+            
+            filename = secure_filename(image_file.filename)
+            save_path = os.path.join(UPLOAD_FOLDER, filename)
+            image_file.save(save_path)
+            
+            image_url_for_db = f'/assets/Images/Moments/{filename}'
+
             sql = """
-                INSERT INTO moment_image 
+INSERT INTO moment_image 
                     (moment_id, image_url, display_order) 
                 VALUES 
                     (%s, %s, %s)
             """
-            cursor.execute(sql, (moment_id, image_url, display_order))
+            cursor.execute(sql, (moment_id, image_url_for_db, display_order))
             conn.commit()
             image_id = cursor.lastrowid
             
@@ -235,9 +240,7 @@ def add_moment_image(current_user, moment_id):
     }
 })
 def delete_moment_image(current_user, image_id):
-    """
-    删除动态中的特定图片
-    """
+
     conn = get_db_connection()
     if not conn:
         return jsonify({'success': False, 'error': '数据库连接失败'}), 500
@@ -246,7 +249,7 @@ def delete_moment_image(current_user, image_id):
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             # 获取图片信息及其关联动态
             sql = """
-                SELECT mi.id, mi.moment_id, m.user_id 
+                SELECT mi.id, mi.moment_id, m.user_id AS moment_user_id 
                 FROM moment_image mi
                 JOIN moment m ON mi.moment_id = m.id
                 WHERE mi.id = %s
@@ -262,7 +265,7 @@ def delete_moment_image(current_user, image_id):
                 }), 404
                 
             # 检查当前用户是否是动态所有者
-            if image_data['user_id'] != current_user['user_id']:
+            if image_data['moment_user_id'] != current_user['user_id']:
                 return jsonify({
                     'success': False,
                     'error': '无权删除此图片',

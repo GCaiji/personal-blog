@@ -1,11 +1,22 @@
+import os
 from flask import Blueprint, request, jsonify
 from flasgger import swag_from
-from flask import Blueprint, request, jsonify
 import pymysql
+from werkzeug.utils import secure_filename
 from utils.auth_utils import jwt_required, role_required
 from utils.db import get_db_connection
 
+
+
+
 moment_bp = Blueprint('moment_bp', __name__)
+
+UPLOAD_FOLDER = os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'uploads')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @moment_bp.route('/moments', methods=['GET'])
 @jwt_required
@@ -90,6 +101,12 @@ def get_moments(current_user):
                 moment['likes_count'] = like_count # 修改为 likes_count 以匹配前端
                 moment['comments'] = [] # 初始化评论列表，如果需要详细评论，需要另外查询
 
+                # 获取动态图片
+                sql_images = "SELECT id, image_url, display_order FROM moment_image WHERE moment_id = %s ORDER BY display_order"
+                cursor.execute(sql_images, (moment_id,))
+                images = cursor.fetchall()
+                moment['images'] = images
+
             return jsonify({
                 'moments': moments,
                 'total': total,
@@ -105,7 +122,7 @@ def get_moments(current_user):
     finally:
         conn.close()
 
-@moment_bp.route('/moment', methods=['POST'])
+@moment_bp.route('/moments', methods=['POST'])
 @jwt_required
 @swag_from({
     'tags': ['Moment'],
@@ -133,19 +150,18 @@ def get_moments(current_user):
     ]
 })
 def create_moment(current_user):
-    data = request.get_json()
-    content = data.get('content')
+    content = request.json.get('content')
 
-    
     if not content:
         return jsonify({'error': '动态内容不能为空'}), 400
-    
+
     conn = get_db_connection()
     if not conn:
         return jsonify({'error': '数据库连接失败'}), 500
 
     try:
         with conn.cursor() as cursor:
+            # 插入动态内容
             sql = """
                 INSERT INTO `moment` 
                     (content) 
@@ -154,11 +170,11 @@ def create_moment(current_user):
             """
             cursor.execute(sql, (content,))
             conn.commit()
-            
-            conn.commit()
             new_moment_id = cursor.lastrowid
 
-            # 获取新创建的动态的完整信息，包括用户信息
+
+
+            # 获取新创建的动态的完整信息，包括用户信息和图片
             cursor.execute("SELECT id, content, publish_time FROM `moment` WHERE id = %s", (new_moment_id,))
             new_moment = cursor.fetchone()
 
@@ -167,15 +183,21 @@ def create_moment(current_user):
                 cursor.execute("SELECT id, username FROM user WHERE id = 1")
                 user_info = cursor.fetchone()
                 new_moment['user'] = user_info if user_info else {'username': '未知用户'}
-                new_moment['likes_count'] = 0 # 新创建的动态点赞数为0
-                new_moment['comments'] = [] # 新创建的动态评论为空
+                new_moment['likes_count'] = 0  # 新创建的动态点赞数为0
+                new_moment['comments'] = []  # 新创建的动态评论为空
+
+                # 获取动态图片
+                sql_images = "SELECT id, image_url, display_order FROM moment_image WHERE moment_id = %s ORDER BY display_order"
+                cursor.execute(sql_images, (new_moment_id,))
+                images_data = cursor.fetchall()
+                new_moment['images'] = images_data
 
             return jsonify({
                 'code': 200,
                 'message': '动态创建成功',
                 'data': new_moment
             }), 200
-            
+
     except pymysql.Error as e:
         conn.rollback()
         return jsonify({'error': f'数据库错误: {str(e)}'}), 500

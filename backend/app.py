@@ -16,6 +16,23 @@ from blueprints.moment_image_routes import moment_image_bp
 
 
 app = Flask(__name__, static_folder='../frontend/MyBlog/dist', static_url_path='/')
+
+# 配置一个额外的静态文件目录来服务 src/assets
+ASSETS_FOLDER = os.path.join(app.root_path, '..', 'frontend', 'MyBlog', 'src', 'assets')
+app.add_url_rule('/static_assets/<path:filename>',
+                 endpoint='assets',
+                 view_func=lambda filename: send_from_directory(ASSETS_FOLDER, filename))
+
+# 配置上传文件目录
+UPLOAD_FOLDER = os.path.join(app.root_path, 'uploads')
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# 添加路由以服务上传的图片
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 app.config.from_object(Config)
 
 app.config['SWAGGER'] = {

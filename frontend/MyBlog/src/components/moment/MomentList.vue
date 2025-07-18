@@ -25,7 +25,7 @@
           <div class="moment-content">
             <p>{{ moment.content }}</p>
             <div v-if="moment.images && moment.images.length" class="moment-images">
-              <img v-for="image in moment.images" :src="`http://localhost:5000${image}`" :key="image" class="moment-image" />
+              <img v-for="image in moment.images" :src="`http://localhost:5000/static_assets/${image.image_url.replace(/\\/g, '/').replace('src/assets/', '')}`" :key="image.id" class="moment-image" @click="showImageModal(`http://localhost:5000/static_assets/${image.image_url.replace(/\\/g, '/').replace('src/assets/', '')}`)" />
             </div>
           </div>
           <div class="moment-actions">
@@ -51,6 +51,10 @@
       <SignInCard />
     </aside>
   </div>
+  <div v-if="showModal" class="image-modal" @click.self="closeModal">
+    <img :src="currentImage" alt="大图" class="modal-content" />
+    <span class="close-button" @click="closeModal">&times;</span>
+  </div>
 </template>
 
 <script setup>
@@ -61,6 +65,18 @@ import SignInCard from './SignInCard.vue';
 import MomentPostBox from './MomentPostBox.vue';
 
 const moments = ref([]);
+const showModal = ref(false);
+const currentImage = ref('');
+
+const showImageModal = (imageUrl) => {
+  currentImage.value = imageUrl;
+  showModal.value = true;
+};
+
+const closeModal = () => {
+  showModal.value = false;
+  currentImage.value = '';
+};
 
 
 const handlePostMoment = async (content) => {
@@ -147,12 +163,8 @@ const toggleLike = async (moment) => {
   try {
     const token = localStorage.getItem('jwt_token');
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const response = await axios.post(`http://localhost:5000/api/moments/${moment.id}/like`, {}, { headers });
-    if (response.data.code === 200) {
-      moment.likes = response.data.data.likes_count;
-    } else {
-      console.error('Error toggling like:', response.data.message);
-    }
+    const response = await axios.post(`http://localhost:5000/api/moment/${moment.id}/like`, {}, { headers });
+    moment.likes = response.data.like_count;
   } catch (error) {
     console.error('Error toggling like:', error);
   }
@@ -161,11 +173,15 @@ const toggleLike = async (moment) => {
 
 
 onMounted(async () => {
-
-
   fetchMoments();
 });
+
+// 关闭弹窗函数绑定到模板事件中
+// showImageModal和closeModal函数已定义
+
 </script>
+
+
 
 <style scoped>
 .moment-page-wrapper {
@@ -196,6 +212,54 @@ onMounted(async () => {
   text-align: center;
   margin-bottom: 20px;
   color: #333;
+}
+
+.moment-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); /* Adjust column size as needed */
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.moment-image {
+  width: 100px;
+  height: 100px;
+  object-fit: cover; /* Ensures the image covers the area without distortion */
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.2s ease-in-out;
+}
+
+.moment-image:hover {
+  transform: scale(1.05);
+}
+
+.image-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+}
+
+.close-button {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  color: white;
+  font-size: 30px;
+  cursor: pointer;
 }
 
 
